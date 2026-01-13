@@ -1,0 +1,72 @@
+# Snowmelt Control System - Main Configuration
+
+# Temperature Sensors (1-Wire addresses)
+sensors:
+  glycol_return:
+    address: "28-2605d446635a"
+    name: "Glycol Return"
+    label: "White tape"
+  glycol_supply:
+    address: "28-0881d44609e5"
+    name: "Glycol Supply"
+    label: "Orange tape"
+  heat_exchanger_in:
+    address: "28-2401000088aa"
+    name: "Heat Exchanger In"
+    label: "Green tape"
+  heat_exchanger_out:
+    address: "28-240100009c9a"
+    name: "Heat Exchanger Out"
+    label: "Yellow tape"
+  dhw_tank:
+    address: "28-30b6d44610ba"
+    name: "DHW Tank"
+    label: "Blue tape"
+
+# GPIO Configuration for 1-Wire
+gpio:
+  onewire_pin: 23
+
+# Relay Configuration (Oono 8-relay HAT)
+# Relay numbers correspond to physical relay positions 1-8
+relays:
+  glycol_pump:
+    relay: 1
+    name: "Glycol Pump"
+    description: "Circulates glycol through snowmelt system"
+  primary_pump:
+    relay: 2
+    name: "Primary Pump"
+    description: "Circulates hot water through heat exchanger"
+  bypass_valve:
+    relay: 3
+    name: "Bypass Valve"
+    description: "Controls glycol flow through heat exchanger"
+  dhw_pump:
+    relay: 4
+    name: "DHW Recirc Pump"
+    description: "Circulates domestic hot water"
+
+# Default Setpoints (Fahrenheit)
+setpoints:
+  glycol:
+    high_temp: 110.0          # Target glycol return temperature
+    delta_t: 15.0             # Delta from high to trigger heating
+  dhw:
+    high_temp: 125.0          # DHW tank high setpoint
+    delta_t: 10.0             # Delta from high to trigger recirculation
+  eco:
+    high_temp: 115.0          # Eco mode DHW high setpoint
+    delta_t: 15.0             # Eco mode delta
+
+# Eco Mode Schedule (24-hour clock)
+eco_schedule:
+  enabled: true
+  start_time: "22:00"         # 10:00 PM
+  end_time: "06:00"           # 6:00 AM
+
+# System Settings
+system:
+  poll_interval: 5            # Sensor polling interval in seconds
+  log_level: "INFO"
+  log_file: "/var/log/snowmelt/control.log"

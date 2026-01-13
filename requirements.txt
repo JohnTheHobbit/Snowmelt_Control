@@ -1,0 +1,17 @@
+# Snowmelt Control System - Python Dependencies
+
+# MQTT client for Home Assistant integration
+paho-mqtt>=1.6.1,<2.0
+
+# Configuration file handling
+PyYAML>=6.0
+
+# GUI framework for touchscreen interface
+PyQt5>=5.15.0
+
+# Raspberry Pi GPIO (only needed on actual RPi hardware)
+# RPi.GPIO>=0.7.1
+
+# Optional: For development and testing
+# pytest>=7.0
+# pytest-cov>=4.0
