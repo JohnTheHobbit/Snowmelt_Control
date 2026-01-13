@@ -6,4 +6,4 @@ systems with MQTT integration for Home Assistant and touchscreen GUI.
 """
 
 __version__ = "1.0.0"
-__author__ = "Your Name"
+__author__ = "John Boyd"

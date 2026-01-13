@@ -50,10 +50,10 @@ relays:
 # Default Setpoints (Fahrenheit)
 setpoints:
   glycol:
-    high_temp: 110.0          # Target glycol return temperature
+    high_temp: 70.0          # Target glycol return temperature
     delta_t: 15.0             # Delta from high to trigger heating
   dhw:
-    high_temp: 125.0          # DHW tank high setpoint
+    high_temp: 130.0          # DHW tank high setpoint
     delta_t: 10.0             # Delta from high to trigger recirculation
   eco:
     high_temp: 115.0          # Eco mode DHW high setpoint
@@ -63,7 +63,7 @@ setpoints:
 eco_schedule:
   enabled: true
   start_time: "22:00"         # 10:00 PM
-  end_time: "06:00"           # 6:00 AM
+  end_time: "05:00"           # 5:00 AM
 
 # System Settings
 system:
