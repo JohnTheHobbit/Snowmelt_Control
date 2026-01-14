@@ -45,19 +45,24 @@ apt-get update
 apt-get upgrade -y
 
 echo -e "${GREEN}Step 2: Installing system dependencies...${NC}"
+# Note: Package names updated for Raspberry Pi OS Bookworm (Debian 12)
+# - libgpiod2 -> gpiod (command-line tools) + python3-libgpiod (Python bindings)
+# - libatlas-base-dev -> libopenblas-dev (alternative BLAS implementation)
+# - libtiff5 -> libtiff6 (updated version in Bookworm)
 apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
     python3-pyqt5 \
     python3-dev \
+    python3-libgpiod \
     git \
     i2c-tools \
-    libgpiod2 \
+    gpiod \
     fonts-dejavu \
-    libatlas-base-dev \
+    libopenblas-dev \
     libopenjp2-7 \
-    libtiff5
+    libtiff6
 
 echo -e "${GREEN}Step 3: Enabling 1-Wire interface...${NC}"
 # Add 1-Wire configuration to config.txt if not present
@@ -107,7 +112,9 @@ sudo -u "$SERVICE_USER" python3 -m venv "$INSTALL_DIR/venv"
 
 echo -e "${GREEN}Step 9: Installing Python dependencies...${NC}"
 sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install --upgrade pip
-sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install paho-mqtt PyYAML RPi.GPIO
+# Use rpi-lgpio instead of RPi.GPIO for Pi 5 and Bookworm compatibility
+# rpi-lgpio is a drop-in replacement that uses the modern libgpiod backend
+sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/pip" install paho-mqtt PyYAML rpi-lgpio
 
 # PyQt5 is typically installed system-wide on RPi OS
 # Link it to the virtual environment

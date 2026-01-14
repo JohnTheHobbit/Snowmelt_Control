@@ -126,9 +126,9 @@ def main():
             label = f"Sensor {i+1}"
         
         print(f"  {sensor_id}:")
-        print(f'    address: "{sensor[\'address\']}"')
-        print(f'    name: "{label.split(" - ")[-1] if " - " in label else label}"')
-        print(f'    label: "{label.split(" - ")[0] if " - " in label else ""}"')
+        print('    address: "{}"'.format(sensor['address']))
+        print('    name: "{}"'.format(label.split(" - ")[-1] if " - " in label else label))
+        print('    label: "{}"'.format(label.split(" - ")[0] if " - " in label else ""))
     
     print()
     print("NOTE: Update the sensor IDs and labels above to match your")

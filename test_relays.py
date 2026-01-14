@@ -30,7 +30,7 @@ RELAY_GPIO_MAP = {
 }
 
 # Most relay HATs are active-low (relay ON when GPIO LOW)
-ACTIVE_LOW = True
+ACTIVE_LOW = False
 
 # Relay names for this project
 RELAY_NAMES = {

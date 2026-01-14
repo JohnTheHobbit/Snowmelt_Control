@@ -231,19 +231,27 @@ Copy all the project files to `/home/pi/snowmelt_control/`
 
 ```bash
 # Install required system packages
+# Note: Package names for Raspberry Pi OS Bookworm (Debian 12)
 sudo apt install -y \
     python3 \
     python3-pip \
     python3-venv \
     python3-pyqt5 \
     python3-dev \
-    libgpiod2 \
+    python3-libgpiod \
+    gpiod \
     fonts-dejavu \
-    libatlas-base-dev \
+    libopenblas-dev \
     libopenjp2-7 \
-    libtiff5 \
+    libtiff6 \
     i2c-tools
 ```
+
+> **Note for older Raspberry Pi OS versions (Bullseye/Buster):**
+> If you're running an older OS version, use these package names instead:
+> - `libgpiod2` instead of `gpiod`
+> - `libatlas-base-dev` instead of `libopenblas-dev`
+> - `libtiff5` instead of `libtiff6`
 
 ### Step 12: Create Python Virtual Environment
 
@@ -264,13 +272,20 @@ pip install --upgrade pip
 
 ```bash
 # Install from requirements file
-pip install paho-mqtt PyYAML RPi.GPIO
+pip install paho-mqtt PyYAML
+
+# Install GPIO library - use rpi-lgpio for Pi 5 compatibility
+# rpi-lgpio is a drop-in replacement for RPi.GPIO that works on all Pi models
+pip install rpi-lgpio
 
 # Link system PyQt5 to virtual environment
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
 ln -sf /usr/lib/python3/dist-packages/PyQt5 "$SITE_PACKAGES/"
 ln -sf /usr/lib/python3/dist-packages/sip* "$SITE_PACKAGES/"
 ```
+
+> **Note:** `rpi-lgpio` provides the same API as `RPi.GPIO` but uses the modern 
+> `libgpiod` backend, making it compatible with Raspberry Pi 5 and Bookworm OS.
 
 ### Step 14: Create Log Directory
 

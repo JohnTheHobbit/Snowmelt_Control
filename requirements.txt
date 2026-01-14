@@ -9,8 +9,9 @@ PyYAML>=6.0
 # GUI framework for touchscreen interface
 PyQt5>=5.15.0
 
-# Raspberry Pi GPIO (only needed on actual RPi hardware)
-# RPi.GPIO>=0.7.1
+# Raspberry Pi GPIO - use rpi-lgpio for Pi 5 and Bookworm compatibility
+# rpi-lgpio is a drop-in replacement for RPi.GPIO using libgpiod backend
+rpi-lgpio>=0.6
 
 # Optional: For development and testing
 # pytest>=7.0

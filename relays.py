@@ -57,7 +57,7 @@ class RelayController:
     }
     
     # Some relay HATs are active-low (relay on when GPIO low)
-    ACTIVE_LOW = True
+    ACTIVE_LOW = False
     
     def __init__(self, relay_num: int, name: str, description: str = ""):
         self.relay_num = relay_num
