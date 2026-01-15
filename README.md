@@ -209,15 +209,7 @@ hdmi_drive=1
 
 ## Software Installation
 
-### Step 9: Create Project Directory
-
-```bash
-# Create the installation directory
-mkdir -p /home/pi/snowmelt_control
-cd /home/pi/snowmelt_control
-```
-
-### Step 10: Copy Project Files
+### Step 9: Copy Project Files
 
 **Option A: Clone from Git repository (if available)**
 ```bash
@@ -227,7 +219,7 @@ git clone https://github.com/JohnTheHobbit/snowmelt-control.git
 **Option B: Copy files manually**
 Copy all the project files to `/home/pi/snowmelt_control/`
 
-### Step 11: Install System Dependencies
+### Step 10: Install System Dependencies
 
 ```bash
 # Install required system packages
@@ -253,7 +245,7 @@ sudo apt install -y \
 > - `libatlas-base-dev` instead of `libopenblas-dev`
 > - `libtiff5` instead of `libtiff6`
 
-### Step 12: Create Python Virtual Environment
+### Step 11: Create Python Virtual Environment
 
 ```bash
 cd /home/pi/snowmelt_control
@@ -268,7 +260,7 @@ source venv/bin/activate
 pip install --upgrade pip
 ```
 
-### Step 13: Install Python Dependencies
+### Step 12: Install Python Dependencies
 
 ```bash
 # Install from requirements file
@@ -287,7 +279,7 @@ ln -sf /usr/lib/python3/dist-packages/sip* "$SITE_PACKAGES/"
 > **Note:** `rpi-lgpio` provides the same API as `RPi.GPIO` but uses the modern 
 > `libgpiod` backend, making it compatible with Raspberry Pi 5 and Bookworm OS.
 
-### Step 14: Create Log Directory
+### Step 13: Create Log Directory
 
 ```bash
 sudo mkdir -p /var/log/snowmelt
@@ -295,7 +287,7 @@ sudo chown pi:pi /var/log/snowmelt
 sudo chmod 755 /var/log/snowmelt
 ```
 
-### Step 15: Make Scripts Executable
+### Step 14: Make Scripts Executable
 
 ```bash
 chmod +x main.py
@@ -308,7 +300,7 @@ chmod +x install.sh
 
 ## Hardware Setup
 
-### Step 16: Wire Temperature Sensors
+### Step 15: Wire Temperature Sensors
 
 DS18B20 1-Wire sensors use 3 wires:
 - **Red (VCC)**: Connect to 3.3V (Pin 1) or 5V (Pin 2)
@@ -331,14 +323,14 @@ Wiring Diagram:
     GND (Pin 6) ────────────────────┴─── Black wire (all sensors)
 ```
 
-### Step 17: Install Relay HAT
+### Step 16: Install Relay HAT
 
 1. Power off the Raspberry Pi
 2. Carefully align the Oono 8-relay HAT with the GPIO header
 3. Press down firmly to seat the HAT
 4. Power on and verify the relay LEDs are off
 
-### Step 18: Wire Equipment to Relays
+### Step 17: Wire Equipment to Relays
 
 Connect your equipment through the relay terminals:
 - **Relay 1**: Glycol Pump
@@ -349,7 +341,7 @@ Connect your equipment through the relay terminals:
 
 **Warning**: Ensure all high-voltage wiring is done by a qualified electrician!
 
-### Step 19: Verify Sensor Discovery
+### Step 18: Verify Sensor Discovery
 
 ```bash
 cd /home/pi/snowmelt_control
@@ -372,7 +364,7 @@ Address              Temperature     Status
 28-30b6d44610ba      117.34 °F       OK
 ```
 
-### Step 20: Test Relays
+### Step 19: Test Relays
 
 ```bash
 # Test all relays sequentially
@@ -389,7 +381,7 @@ python test_relays.py --interactive
 
 ## Configuration Files
 
-### Step 21: Configure Sensor Addresses
+### Step 20: Configure Sensor Addresses
 
 Edit `config.yaml` and verify the sensor addresses match your hardware:
 
@@ -423,7 +415,7 @@ sensors:
     label: "Blue tape"
 ```
 
-### Step 22: Configure MQTT Credentials
+### Step 21: Configure MQTT Credentials
 
 ```bash
 nano secrets.yaml
@@ -446,7 +438,7 @@ mqtt:
 chmod 600 secrets.yaml
 ```
 
-### Step 23: Adjust Setpoints (Optional)
+### Step 22: Adjust Setpoints (Optional)
 
 Edit `config.yaml` to adjust default setpoints:
 
@@ -472,7 +464,7 @@ eco_schedule:
 
 ## Home Assistant Integration
 
-### Step 24: Configure Home Assistant MQTT
+### Step 23: Configure Home Assistant MQTT
 
 Ensure MQTT is configured in Home Assistant. Add to `configuration.yaml`:
 
@@ -486,7 +478,7 @@ mqtt:
   discovery_prefix: homeassistant
 ```
 
-### Step 25: Entities Created
+### Step 24: Entities Created
 
 The system automatically creates these Home Assistant entities via MQTT discovery:
 
@@ -530,7 +522,7 @@ The system automatically creates these Home Assistant entities via MQTT discover
 
 ## Starting the System
 
-### Step 26: Test Manual Startup
+### Step 25: Test Manual Startup
 
 ```bash
 cd /home/pi/snowmelt_control
@@ -546,7 +538,7 @@ python main.py --debug
 python main.py --no-gui --debug
 ```
 
-### Step 27: Install Systemd Service
+### Step 26: Install Systemd Service
 
 ```bash
 # Copy service files
@@ -557,7 +549,7 @@ sudo cp snowmelt-headless.service /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
-### Step 28: Enable and Start Service
+### Step 27: Enable and Start Service
 
 **For GUI mode (with touchscreen):**
 ```bash
@@ -577,7 +569,7 @@ sudo systemctl enable snowmelt-headless.service
 sudo systemctl start snowmelt-headless.service
 ```
 
-### Step 29: View Logs
+### Step 28: View Logs
 
 ```bash
 # View service logs
@@ -587,7 +579,7 @@ sudo journalctl -u snowmelt.service -f
 tail -f /var/log/snowmelt/control.log
 ```
 
-### Step 30: Reboot and Verify
+### Step 29: Reboot and Verify
 
 ```bash
 sudo reboot
