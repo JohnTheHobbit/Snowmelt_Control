@@ -1,7 +1,7 @@
 [Unit]
 Description=Snowmelt Control System
 Documentation=https://github.com/yourusername/snowmelt-control
-After=network.target mosquitto.service
+After=network.target graphical.target
 Wants=network-online.target
 
 [Service]
@@ -18,10 +18,5 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
-# Security hardening
-NoNewPrivileges=false
-ProtectSystem=false
-PrivateTmp=true
-
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
