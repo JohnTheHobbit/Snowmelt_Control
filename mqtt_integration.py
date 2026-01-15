@@ -191,7 +191,7 @@ class MQTTIntegration:
             "identifiers": ["snowmelt_control"],
             "name": "Snowmelt Control System",
             "model": "RPi Snowmelt Controller",
-            "manufacturer": "Custom",
+            "manufacturer": "John Boyd",
             "sw_version": "1.0.0"
         }
         
