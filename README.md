@@ -221,7 +221,7 @@ cd /home/pi/snowmelt_control
 
 **Option A: Clone from Git repository (if available)**
 ```bash
-git clone https://github.com/JohnTheHobbit/snowmelt-control.git .
+git clone https://github.com/JohnTheHobbit/snowmelt-control.git
 ```
 
 **Option B: Copy files manually**
