@@ -1,6 +1,6 @@
 [Unit]
 Description=Snowmelt Control System
-Documentation=https://github.com/yourusername/snowmelt-control
+Documentation=https://github.com/JohnTheHobbit/Snowmelt-Control
 After=network.target graphical.target
 Wants=network-online.target
 
