@@ -775,8 +775,8 @@ class SetpointsTab(QWidget):
         # High setpoint
         high_row = QHBoxLayout()
         high_label = QLabel("High:")
-        high_label.setFixedWidth(45)
-        high_label.setStyleSheet("font-size: 13px;")
+        high_label.setFixedWidth(50)
+        high_label.setStyleSheet("font-size: 14px;")
         self.glycol_high = TouchSpinBox(50, 90, " °F", 5.0)
         self.glycol_high.valueChanged.connect(self._on_glycol_changed)
         high_row.addWidget(high_label)
@@ -814,8 +814,8 @@ class SetpointsTab(QWidget):
         # High setpoint
         high_row = QHBoxLayout()
         high_label = QLabel("High:")
-        high_label.setFixedWidth(45)
-        high_label.setStyleSheet("font-size: 13px;")
+        high_label.setFixedWidth(50)
+        high_label.setStyleSheet("font-size: 14px;")
         self.dhw_high = TouchSpinBox(100, 130, " °F", 5.0)
         self.dhw_high.valueChanged.connect(self._on_dhw_changed)
         high_row.addWidget(high_label)

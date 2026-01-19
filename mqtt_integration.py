@@ -290,11 +290,11 @@ class MQTTIntegration:
         
         # Number inputs for setpoints
         setpoints = [
-            ("glycol_high", "Glycol High Setpoint", 80, 140, 1),
+            ("glycol_high", "Glycol High Setpoint", 50, 90, 5),
             ("glycol_delta", "Glycol Delta T", 5, 30, 1),
-            ("dhw_high", "DHW High Setpoint", 100, 140, 1),
+            ("dhw_high", "DHW High Setpoint", 100, 140, 5),
             ("dhw_delta", "DHW Delta T", 5, 20, 1),
-            ("eco_high", "Eco High Setpoint", 100, 130, 1),
+            ("eco_high", "Eco High Setpoint", 100, 130, 5),
             ("eco_delta", "Eco Delta T", 5, 25, 1),
         ]
         
