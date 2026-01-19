@@ -6,13 +6,14 @@ Optimized for fullscreen kiosk mode with touch-friendly controls
 
 import sys
 import logging
+import subprocess
 from datetime import datetime
 from typing import Dict, Optional
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QFrame, QTabWidget, QTabBar,
-    QGroupBox, QDoubleSpinBox, QTimeEdit,
+    QGroupBox, QDoubleSpinBox, QTimeEdit, QMessageBox,
     QButtonGroup, QSizePolicy, QSpacerItem, QStyleOptionTab, QStyle
 )
 from PyQt5.QtCore import Qt, QTimer, QTime, pyqtSignal, QSize
@@ -735,11 +736,12 @@ class EquipmentTab(QWidget):
 
 
 class SetpointsTab(QWidget):
-    """Setpoints configuration tab with touch-friendly controls"""
-    
+    """Settings tab with setpoints and system controls"""
+
     setpoint_changed = pyqtSignal(str, float, float)
     system_toggled = pyqtSignal(str, bool)
     eco_schedule_changed = pyqtSignal(str, str)
+    shutdown_requested = pyqtSignal()
     
     def __init__(self, control: ControlLogic):
         super().__init__()
@@ -747,144 +749,198 @@ class SetpointsTab(QWidget):
         self._setup_ui()
     
     def _setup_ui(self):
-        layout = QHBoxLayout(self)
+        # Use grid layout: left column (Snowmelt, DHW, System stacked), right column (Eco Mode)
+        layout = QGridLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(10)
-        
-        # Left column - Snowmelt
+        layout.setSpacing(8)
+
+        # --- Left column: Snowmelt and DHW side by side, System below ---
+        left_column = QVBoxLayout()
+        left_column.setSpacing(8)
+
+        # Top row: Snowmelt and DHW side by side
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
+
+        # Snowmelt group
         snowmelt_group = QGroupBox("Snowmelt")
         snowmelt_layout = QVBoxLayout(snowmelt_group)
-        snowmelt_layout.setContentsMargins(10, 10, 10, 10)
-        snowmelt_layout.setSpacing(10)
-        
+        snowmelt_layout.setContentsMargins(8, 8, 8, 8)
+        snowmelt_layout.setSpacing(6)
+
         self.btn_snowmelt = SystemEnableButton("snowmelt", "Enable Snowmelt")
         self.btn_snowmelt.toggled_state.connect(lambda s, e: self.system_toggled.emit(s, e))
         snowmelt_layout.addWidget(self.btn_snowmelt)
-        
+
         # High setpoint
         high_row = QHBoxLayout()
         high_label = QLabel("High:")
-        high_label.setFixedWidth(50)
-        high_label.setStyleSheet("font-size: 14px;")
+        high_label.setFixedWidth(45)
+        high_label.setStyleSheet("font-size: 13px;")
         self.glycol_high = TouchSpinBox(50, 90, " °F", 5.0)
         self.glycol_high.valueChanged.connect(self._on_glycol_changed)
         high_row.addWidget(high_label)
         high_row.addWidget(self.glycol_high)
         snowmelt_layout.addLayout(high_row)
-        
+
         # Delta setpoint
         delta_row = QHBoxLayout()
         delta_label = QLabel("Delta:")
-        delta_label.setFixedWidth(50)
-        delta_label.setStyleSheet("font-size: 14px;")
+        delta_label.setFixedWidth(45)
+        delta_label.setStyleSheet("font-size: 13px;")
         self.glycol_delta = TouchSpinBox(5, 30, " °F", 1.0)
         self.glycol_delta.valueChanged.connect(self._on_glycol_changed)
         delta_row.addWidget(delta_label)
         delta_row.addWidget(self.glycol_delta)
         snowmelt_layout.addLayout(delta_row)
-        
+
         self.glycol_low_label = QLabel("Low: --")
-        self.glycol_low_label.setStyleSheet("color: #adb5bd; font-size: 13px;")
+        self.glycol_low_label.setStyleSheet("color: #adb5bd; font-size: 12px;")
         self.glycol_low_label.setAlignment(Qt.AlignCenter)
         snowmelt_layout.addWidget(self.glycol_low_label)
-        snowmelt_layout.addStretch()
-        
-        # Middle column - DHW
+
+        top_row.addWidget(snowmelt_group)
+
+        # DHW group
         dhw_group = QGroupBox("DHW")
         dhw_layout = QVBoxLayout(dhw_group)
-        dhw_layout.setContentsMargins(10, 10, 10, 10)
-        dhw_layout.setSpacing(10)
-        
+        dhw_layout.setContentsMargins(8, 8, 8, 8)
+        dhw_layout.setSpacing(6)
+
         self.btn_dhw = SystemEnableButton("dhw", "Enable DHW")
         self.btn_dhw.toggled_state.connect(lambda s, e: self.system_toggled.emit(s, e))
         dhw_layout.addWidget(self.btn_dhw)
-        
+
         # High setpoint
         high_row = QHBoxLayout()
         high_label = QLabel("High:")
-        high_label.setFixedWidth(50)
-        high_label.setStyleSheet("font-size: 14px;")
+        high_label.setFixedWidth(45)
+        high_label.setStyleSheet("font-size: 13px;")
         self.dhw_high = TouchSpinBox(100, 130, " °F", 5.0)
         self.dhw_high.valueChanged.connect(self._on_dhw_changed)
         high_row.addWidget(high_label)
         high_row.addWidget(self.dhw_high)
         dhw_layout.addLayout(high_row)
-        
+
         # Delta setpoint
         delta_row = QHBoxLayout()
         delta_label = QLabel("Delta:")
-        delta_label.setFixedWidth(50)
-        delta_label.setStyleSheet("font-size: 14px;")
+        delta_label.setFixedWidth(45)
+        delta_label.setStyleSheet("font-size: 13px;")
         self.dhw_delta = TouchSpinBox(5, 20, " °F", 1.0)
         self.dhw_delta.valueChanged.connect(self._on_dhw_changed)
         delta_row.addWidget(delta_label)
         delta_row.addWidget(self.dhw_delta)
         dhw_layout.addLayout(delta_row)
-        
+
         self.dhw_low_label = QLabel("Low: --")
-        self.dhw_low_label.setStyleSheet("color: #adb5bd; font-size: 13px;")
+        self.dhw_low_label.setStyleSheet("color: #adb5bd; font-size: 12px;")
         self.dhw_low_label.setAlignment(Qt.AlignCenter)
         dhw_layout.addWidget(self.dhw_low_label)
-        dhw_layout.addStretch()
-        
-        # Right column - Eco Mode
+
+        top_row.addWidget(dhw_group)
+
+        left_column.addLayout(top_row)
+
+        # System group (below Snowmelt and DHW)
+        system_group = QGroupBox("System")
+        system_layout = QHBoxLayout(system_group)
+        system_layout.setContentsMargins(8, 8, 8, 8)
+        system_layout.setSpacing(10)
+
+        # Shutdown button - prominent red styling
+        self.btn_shutdown = QPushButton("Shutdown RPi")
+        self.btn_shutdown.setStyleSheet("""
+            QPushButton {
+                background-color: #c0392b;
+                color: #ffffff;
+                border: 2px solid #a93226;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                min-height: 45px;
+                padding: 8px 20px;
+            }
+            QPushButton:hover {
+                background-color: #e74c3c;
+                border-color: #c0392b;
+            }
+            QPushButton:pressed {
+                background-color: #922b21;
+            }
+        """)
+        self.btn_shutdown.clicked.connect(self._on_shutdown_clicked)
+        system_layout.addWidget(self.btn_shutdown)
+        system_layout.addStretch()
+
+        left_column.addWidget(system_group)
+
+        # --- Right column: Eco Mode ---
         eco_group = QGroupBox("Eco Mode")
         eco_layout = QVBoxLayout(eco_group)
-        eco_layout.setContentsMargins(10, 10, 10, 10)
-        eco_layout.setSpacing(10)
-        
+        eco_layout.setContentsMargins(8, 8, 8, 8)
+        eco_layout.setSpacing(6)
+
         self.btn_eco = SystemEnableButton("eco", "Enable Eco Mode")
         self.btn_eco.toggled_state.connect(lambda s, e: self.system_toggled.emit(s, e))
         eco_layout.addWidget(self.btn_eco)
-        
+
         # High setpoint
         high_row = QHBoxLayout()
         high_label = QLabel("High:")
-        high_label.setFixedWidth(50)
-        high_label.setStyleSheet("font-size: 14px;")
+        high_label.setFixedWidth(45)
+        high_label.setStyleSheet("font-size: 13px;")
         self.eco_high = TouchSpinBox(100, 130, " °F", 1.0)
         self.eco_high.valueChanged.connect(self._on_eco_changed)
         high_row.addWidget(high_label)
         high_row.addWidget(self.eco_high)
         eco_layout.addLayout(high_row)
-        
+
         # Delta setpoint
         delta_row = QHBoxLayout()
         delta_label = QLabel("Delta:")
-        delta_label.setFixedWidth(50)
-        delta_label.setStyleSheet("font-size: 14px;")
+        delta_label.setFixedWidth(45)
+        delta_label.setStyleSheet("font-size: 13px;")
         self.eco_delta = TouchSpinBox(5, 25, " °F", 1.0)
         self.eco_delta.valueChanged.connect(self._on_eco_changed)
         delta_row.addWidget(delta_label)
         delta_row.addWidget(self.eco_delta)
         eco_layout.addLayout(delta_row)
-        
+
         # Start time
         start_row = QHBoxLayout()
         start_label = QLabel("Start:")
-        start_label.setFixedWidth(50)
-        start_label.setStyleSheet("font-size: 14px;")
+        start_label.setFixedWidth(45)
+        start_label.setStyleSheet("font-size: 13px;")
         self.eco_start = TouchTimeEdit()
         self.eco_start.timeChanged.connect(self._on_eco_schedule_changed)
         start_row.addWidget(start_label)
         start_row.addWidget(self.eco_start)
         eco_layout.addLayout(start_row)
-        
+
         # End time
         end_row = QHBoxLayout()
         end_label = QLabel("End:")
-        end_label.setFixedWidth(50)
-        end_label.setStyleSheet("font-size: 14px;")
+        end_label.setFixedWidth(45)
+        end_label.setStyleSheet("font-size: 13px;")
         self.eco_end = TouchTimeEdit()
         self.eco_end.timeChanged.connect(self._on_eco_schedule_changed)
         end_row.addWidget(end_label)
         end_row.addWidget(self.eco_end)
         eco_layout.addLayout(end_row)
-        
-        layout.addWidget(snowmelt_group)
-        layout.addWidget(dhw_group)
-        layout.addWidget(eco_group)
-    
+
+        eco_layout.addStretch()
+
+        # Add to grid: left column spans rows, eco on right
+        layout.addLayout(left_column, 0, 0)
+        layout.addWidget(eco_group, 0, 1)
+        layout.setColumnStretch(0, 2)  # Left column gets more space
+        layout.setColumnStretch(1, 1)  # Eco column
+
+    def _on_shutdown_clicked(self):
+        """Emit shutdown request signal"""
+        self.shutdown_requested.emit()
+
     def _on_glycol_changed(self):
         high = self.glycol_high.value()
         delta = self.glycol_delta.value()
@@ -976,7 +1032,7 @@ class MainWindow(QMainWindow):
         
         self.tabs.addTab(self.dashboard_tab, "Dashboard")
         self.tabs.addTab(self.equipment_tab, "Equipment")
-        self.tabs.addTab(self.setpoints_tab, "Setpoints")
+        self.tabs.addTab(self.setpoints_tab, "Settings")
         
         layout.addWidget(self.tabs)
     
@@ -985,6 +1041,7 @@ class MainWindow(QMainWindow):
         self.setpoints_tab.setpoint_changed.connect(self._on_setpoint_changed)
         self.setpoints_tab.system_toggled.connect(self._on_system_toggled)
         self.setpoints_tab.eco_schedule_changed.connect(self._on_eco_schedule_changed)
+        self.setpoints_tab.shutdown_requested.connect(self._on_shutdown_requested)
         self.dashboard_tab.system_toggled.connect(self._on_system_toggled)
     
     def _on_equipment_mode_changed(self, equipment_id: str, mode: str):
@@ -1021,7 +1078,45 @@ class MainWindow(QMainWindow):
             self.control.set_eco_schedule(start, end)
         except Exception as e:
             logger.error(f"Error setting eco schedule: {e}")
-    
+
+    def _on_shutdown_requested(self):
+        """Handle shutdown request with confirmation dialog"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Confirm Shutdown")
+        msg.setText("Are you sure you want to shutdown the Raspberry Pi?")
+        msg.setInformativeText("The system will power off and need to be manually restarted.")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+        msg.setDefaultButton(QMessageBox.Cancel)
+
+        # Style the dialog for touchscreen
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1a1a2e;
+            }
+            QMessageBox QLabel {
+                color: #eaeaea;
+                font-size: 14px;
+            }
+            QPushButton {
+                min-width: 80px;
+                min-height: 40px;
+                font-size: 14px;
+            }
+        """)
+
+        if msg.exec_() == QMessageBox.Yes:
+            logger.info("Shutdown requested by user - initiating system shutdown")
+            try:
+                subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=True)
+            except Exception as e:
+                logger.error(f"Failed to initiate shutdown: {e}")
+                error_msg = QMessageBox(self)
+                error_msg.setWindowTitle("Shutdown Failed")
+                error_msg.setText(f"Failed to shutdown: {e}")
+                error_msg.setIcon(QMessageBox.Critical)
+                error_msg.exec_()
+
     def _update_display(self):
         # Skip if already updating (prevents queue buildup)
         if self._updating:
