@@ -6,9 +6,10 @@ Optimized for fullscreen kiosk mode with touch-friendly controls
 
 import sys
 import logging
+import socket
 import subprocess
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -32,11 +33,75 @@ TAB_COUNT = 3
 
 class EqualTabBar(QTabBar):
     """Custom tab bar with equal-width tabs"""
-    
+
     def tabSizeHint(self, index):
         # Calculate width: screen width minus margins, divided by tab count
         tab_width = (SCREEN_WIDTH - 12) // TAB_COUNT
         return QSize(tab_width, 45)
+
+
+def get_local_ip() -> str:
+    """Get the local IP address of the device"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return "No Network"
+
+
+def get_network_status() -> bool:
+    """Check if network is available by verifying we have a valid local IP"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return not ip.startswith("127.")
+    except OSError:
+        return False
+
+
+class StatusIndicator(QFrame):
+    """Small status indicator with colored dot and label"""
+
+    def __init__(self, label: str):
+        super().__init__()
+        self._connected = False
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+
+        # Colored status dot
+        self.dot = QLabel()
+        self.dot.setFixedSize(12, 12)
+        self._update_dot_style()
+
+        # Label text
+        self.label = QLabel(label)
+        self.label.setStyleSheet("font-size: 11px; color: #adb5bd;")
+
+        layout.addWidget(self.dot)
+        layout.addWidget(self.label)
+
+        self.setStyleSheet("background-color: transparent;")
+
+    def _update_dot_style(self):
+        color = "#51cf66" if self._connected else "#ff6b6b"
+        self.dot.setStyleSheet(f"""
+            background-color: {color};
+            border-radius: 6px;
+            min-width: 12px; max-width: 12px;
+            min-height: 12px; max-height: 12px;
+        """)
+
+    def set_connected(self, connected: bool):
+        if self._connected != connected:
+            self._connected = connected
+            self._update_dot_style()
 
 
 class StyleSheet:
@@ -620,14 +685,27 @@ class DashboardTab(QWidget):
         temp_layout.addWidget(hx_group, 3)
         temp_layout.addWidget(dhw_group, 1)
         
-        # Time display at bottom
+        # Bottom bar with status indicators and time
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 4, 0, 0)
+        bottom_layout.setSpacing(12)
+
+        # Status indicators on the left
+        self.mqtt_indicator = StatusIndicator("MQTT")
+        self.net_indicator = StatusIndicator("NET")
+        bottom_layout.addWidget(self.mqtt_indicator)
+        bottom_layout.addWidget(self.net_indicator)
+        bottom_layout.addStretch()
+
+        # Time display on the right
         self.time_label = QLabel()
         self.time_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #e94560;")
         self.time_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
+        bottom_layout.addWidget(self.time_label)
+
         layout.addLayout(top_layout)
         layout.addLayout(temp_layout, 1)
-        layout.addWidget(self.time_label)
+        layout.addLayout(bottom_layout)
     
     def _on_system_toggled(self, system: str, enabled: bool):
         self.system_toggled.emit(system, enabled)
@@ -678,6 +756,11 @@ class DashboardTab(QWidget):
         # Update time
         now = datetime.now()
         self.time_label.setText(now.strftime("%H:%M:%S   %Y-%m-%d"))
+
+    def update_connectivity(self, mqtt_connected: bool, net_connected: bool):
+        """Update the connectivity status indicators"""
+        self.mqtt_indicator.set_connected(mqtt_connected)
+        self.net_indicator.set_connected(net_connected)
 
 
 class EquipmentTab(QWidget):
@@ -871,6 +954,45 @@ class SetpointsTab(QWidget):
         """)
         self.btn_shutdown.clicked.connect(self._on_shutdown_clicked)
         system_layout.addWidget(self.btn_shutdown)
+
+        # Read-only info style
+        readonly_style = """
+            background-color: #16213e;
+            border: 1px solid #3d3d5c;
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: #adb5bd;
+            font-size: 12px;
+        """
+
+        # MQTT Host field
+        mqtt_frame = QFrame()
+        mqtt_frame.setStyleSheet("background-color: transparent;")
+        mqtt_layout_inner = QHBoxLayout(mqtt_frame)
+        mqtt_layout_inner.setContentsMargins(0, 0, 0, 0)
+        mqtt_layout_inner.setSpacing(6)
+        mqtt_label = QLabel("MQTT:")
+        mqtt_label.setStyleSheet("font-size: 12px; color: #adb5bd;")
+        self.mqtt_host_value = QLabel("--")
+        self.mqtt_host_value.setStyleSheet(readonly_style)
+        mqtt_layout_inner.addWidget(mqtt_label)
+        mqtt_layout_inner.addWidget(self.mqtt_host_value)
+        system_layout.addWidget(mqtt_frame)
+
+        # RPi IP field
+        ip_frame = QFrame()
+        ip_frame.setStyleSheet("background-color: transparent;")
+        ip_layout_inner = QHBoxLayout(ip_frame)
+        ip_layout_inner.setContentsMargins(0, 0, 0, 0)
+        ip_layout_inner.setSpacing(6)
+        ip_label = QLabel("IP:")
+        ip_label.setStyleSheet("font-size: 12px; color: #adb5bd;")
+        self.rpi_ip_value = QLabel(get_local_ip())
+        self.rpi_ip_value.setStyleSheet(readonly_style)
+        ip_layout_inner.addWidget(ip_label)
+        ip_layout_inner.addWidget(self.rpi_ip_value)
+        system_layout.addWidget(ip_frame)
+
         system_layout.addStretch()
 
         left_column.addWidget(system_group)
@@ -992,6 +1114,14 @@ class SetpointsTab(QWidget):
         for widget in widgets:
             widget.blockSignals(False)
 
+    def set_mqtt_host(self, host: str):
+        """Set the MQTT host display value"""
+        self.mqtt_host_value.setText(host)
+
+    def update_ip_address(self):
+        """Update the RPi IP address display"""
+        self.rpi_ip_value.setText(get_local_ip())
+
 
 class MainWindow(QMainWindow):
     """Main application window - fullscreen kiosk mode"""
@@ -999,6 +1129,7 @@ class MainWindow(QMainWindow):
     def __init__(self, control: ControlLogic):
         super().__init__()
         self.control = control
+        self._mqtt_integration = None  # Optional MQTT integration reference
         self._updating = False  # Flag to prevent overlapping updates
         self._setup_ui()
         self._connect_signals()
@@ -1006,6 +1137,12 @@ class MainWindow(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._update_display)
         self.update_timer.start(500)  # Faster updates (500ms) since reads are now non-blocking
+
+    def set_mqtt_integration(self, mqtt_integration):
+        """Set the MQTT integration reference for status monitoring"""
+        self._mqtt_integration = mqtt_integration
+        if mqtt_integration:
+            self.setpoints_tab.set_mqtt_host(mqtt_integration.broker)
     
     def _setup_ui(self):
         self.setWindowTitle("Snowmelt Control System")
@@ -1132,6 +1269,14 @@ class MainWindow(QMainWindow):
 
             if self.tabs.currentWidget() != self.setpoints_tab:
                 self.setpoints_tab.update_display(state)
+
+            # Update connectivity status indicators
+            net_connected = get_network_status()
+            mqtt_connected = self._mqtt_integration._connected if self._mqtt_integration else False
+            self.dashboard_tab.update_connectivity(mqtt_connected, net_connected)
+
+            # Update IP address in settings (in case it changed)
+            self.setpoints_tab.update_ip_address()
         except Exception as e:
             logger.error(f"Error updating display: {e}")
         finally:
