@@ -766,7 +766,7 @@ class SetpointsTab(QWidget):
         high_label = QLabel("High:")
         high_label.setFixedWidth(50)
         high_label.setStyleSheet("font-size: 14px;")
-        self.glycol_high = TouchSpinBox(80, 140, " °F", 1.0)
+        self.glycol_high = TouchSpinBox(50, 90, " °F", 5.0)
         self.glycol_high.valueChanged.connect(self._on_glycol_changed)
         high_row.addWidget(high_label)
         high_row.addWidget(self.glycol_high)
@@ -804,7 +804,7 @@ class SetpointsTab(QWidget):
         high_label = QLabel("High:")
         high_label.setFixedWidth(50)
         high_label.setStyleSheet("font-size: 14px;")
-        self.dhw_high = TouchSpinBox(100, 140, " °F", 1.0)
+        self.dhw_high = TouchSpinBox(100, 130, " °F", 5.0)
         self.dhw_high.valueChanged.connect(self._on_dhw_changed)
         high_row.addWidget(high_label)
         high_row.addWidget(self.dhw_high)
@@ -939,16 +939,17 @@ class SetpointsTab(QWidget):
 
 class MainWindow(QMainWindow):
     """Main application window - fullscreen kiosk mode"""
-    
+
     def __init__(self, control: ControlLogic):
         super().__init__()
         self.control = control
+        self._updating = False  # Flag to prevent overlapping updates
         self._setup_ui()
         self._connect_signals()
-        
+
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._update_display)
-        self.update_timer.start(1000)
+        self.update_timer.start(500)  # Faster updates (500ms) since reads are now non-blocking
     
     def _setup_ui(self):
         self.setWindowTitle("Snowmelt Control System")
@@ -1022,17 +1023,24 @@ class MainWindow(QMainWindow):
             logger.error(f"Error setting eco schedule: {e}")
     
     def _update_display(self):
+        # Skip if already updating (prevents queue buildup)
+        if self._updating:
+            return
+
+        self._updating = True
         try:
             state = self.control.get_state()
             relay_states = self.control.relays.get_all_states()
-            
+
             self.dashboard_tab.update_display(state)
             self.equipment_tab.update_display(relay_states)
-            
+
             if self.tabs.currentWidget() != self.setpoints_tab:
                 self.setpoints_tab.update_display(state)
         except Exception as e:
             logger.error(f"Error updating display: {e}")
+        finally:
+            self._updating = False
     
     def keyPressEvent(self, event):
         """Handle key press events - ESC to exit fullscreen"""

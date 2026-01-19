@@ -7,8 +7,9 @@ import logging
 from datetime import datetime, time as dtime
 from typing import Dict, Optional, Callable
 from dataclasses import dataclass, field
-from threading import Lock
+from threading import Lock, RLock
 from enum import Enum
+from copy import deepcopy
 
 from sensors import SensorManager, SensorReading
 from relays import RelayManager, EquipmentMode
@@ -69,19 +70,27 @@ class ControlState:
 
 class ControlLogic:
     """Main control logic for the snowmelt and DHW systems"""
-    
-    def __init__(self, sensor_manager: SensorManager, relay_manager: RelayManager, 
+
+    def __init__(self, sensor_manager: SensorManager, relay_manager: RelayManager,
                  setpoint_config: Dict, eco_config: Dict):
         self.sensors = sensor_manager
         self.relays = relay_manager
         self.state = ControlState()
-        self._lock = Lock()
+        # Separate lock for state modifications vs reads
+        self._state_lock = Lock()
+        # Cached copy of state for fast GUI reads (no lock needed for reads)
+        self._cached_state: Optional[ControlState] = None
         self._on_state_change: Optional[Callable] = None
-        
+
         # Load initial setpoints from config
         self._load_setpoints(setpoint_config, eco_config)
-        
+        self._update_cached_state()
+
         logger.info("Control logic initialized")
+
+    def _update_cached_state(self):
+        """Update the cached state copy for GUI reads"""
+        self._cached_state = deepcopy(self.state)
     
     def _load_setpoints(self, setpoint_config: Dict, eco_config: Dict):
         """Load setpoints from configuration"""
@@ -113,10 +122,12 @@ class ControlLogic:
         self._on_state_change = callback
     
     def _notify_state_change(self):
-        """Notify listeners of state change"""
+        """Notify listeners of state change - call with lock held"""
+        self._update_cached_state()
         if self._on_state_change:
-            self._on_state_change(self.state)
-    
+            # Pass cached copy to avoid threading issues
+            self._on_state_change(self._cached_state)
+
     def _is_eco_time(self) -> bool:
         """Check if current time is within eco schedule"""
         if not self.state.eco_enabled:
@@ -138,20 +149,20 @@ class ControlLogic:
     
     def update(self):
         """Main control loop update - call periodically"""
-        with self._lock:
-            # Read all sensors
-            readings = self.sensors.read_all()
-            
+        # Read sensors outside lock (non-blocking now)
+        readings = self.sensors.read_all()
+
+        with self._state_lock:
             # Update temperatures in state
             self._update_temperatures(readings)
-            
+
             # Check eco mode
             self.state.eco_active = self._is_eco_time()
-            
+
             # Run control logic
             self._control_snowmelt()
             self._control_dhw()
-            
+
             # Notify listeners
             self._notify_state_change()
     
@@ -276,64 +287,69 @@ class ControlLogic:
             pass
     
     # --- Public API for setpoint updates ---
-    
+
     def set_snowmelt_enabled(self, enabled: bool):
         """Enable/disable snowmelt system"""
-        with self._lock:
+        with self._state_lock:
             self.state.snowmelt_enabled = enabled
             logger.info(f"Snowmelt system {'enabled' if enabled else 'disabled'}")
             self._notify_state_change()
-    
+
     def set_dhw_enabled(self, enabled: bool):
         """Enable/disable DHW system"""
-        with self._lock:
+        with self._state_lock:
             self.state.dhw_enabled = enabled
             logger.info(f"DHW system {'enabled' if enabled else 'disabled'}")
             self._notify_state_change()
-    
+
     def set_glycol_setpoints(self, high_temp: float, delta_t: float):
         """Update glycol temperature setpoints"""
-        with self._lock:
+        with self._state_lock:
             self.state.glycol_setpoints = Setpoints(high_temp, delta_t)
             logger.info(f"Glycol setpoints: high={high_temp}°F, delta={delta_t}°F")
             self._notify_state_change()
-    
+
     def set_dhw_setpoints(self, high_temp: float, delta_t: float):
         """Update DHW temperature setpoints"""
-        with self._lock:
+        with self._state_lock:
             self.state.dhw_setpoints = Setpoints(high_temp, delta_t)
             logger.info(f"DHW setpoints: high={high_temp}°F, delta={delta_t}°F")
             self._notify_state_change()
-    
+
     def set_eco_setpoints(self, high_temp: float, delta_t: float):
         """Update eco mode setpoints"""
-        with self._lock:
+        with self._state_lock:
             self.state.eco_setpoints = Setpoints(high_temp, delta_t)
             logger.info(f"Eco setpoints: high={high_temp}°F, delta={delta_t}°F")
             self._notify_state_change()
-    
+
     def set_eco_schedule(self, start_time: str, end_time: str):
         """Update eco mode schedule (24-hour format HH:MM)"""
-        with self._lock:
+        with self._state_lock:
             self.state.eco_start = start_time
             self.state.eco_end = end_time
             logger.info(f"Eco schedule: {start_time} - {end_time}")
             self._notify_state_change()
-    
+
     def set_eco_enabled(self, enabled: bool):
         """Enable/disable eco mode"""
-        with self._lock:
+        with self._state_lock:
             self.state.eco_enabled = enabled
             logger.info(f"Eco mode {'enabled' if enabled else 'disabled'}")
             self._notify_state_change()
-    
+
     def set_equipment_mode(self, equipment_id: str, mode: EquipmentMode):
         """Set equipment operating mode"""
         self.relays.set_mode(equipment_id, mode)
         logger.info(f"Equipment {equipment_id} mode set to {mode.value}")
-        self._notify_state_change()
-    
+        with self._state_lock:
+            self._notify_state_change()
+
     def get_state(self) -> ControlState:
-        """Get current control state"""
-        with self._lock:
-            return self.state
+        """Get current control state - returns cached copy (non-blocking)"""
+        # Return cached state for fast GUI reads
+        if self._cached_state is not None:
+            return self._cached_state
+        # Fallback if cache not yet populated
+        with self._state_lock:
+            return deepcopy(self.state)
