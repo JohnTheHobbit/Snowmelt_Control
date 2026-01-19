@@ -219,7 +219,11 @@ def main():
             
             # Create and run GUI
             app, window = create_gui(control)
-            
+
+            # Pass MQTT integration to GUI for status monitoring
+            if mqtt_client:
+                window.set_mqtt_integration(mqtt_client)
+
             logger.info("GUI started")
             exit_code = app.exec_()
             
