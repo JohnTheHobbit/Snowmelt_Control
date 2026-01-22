@@ -13,6 +13,7 @@ from copy import deepcopy
 
 from sensors import SensorManager, SensorReading
 from relays import RelayManager, EquipmentMode
+from setpoint_persistence import SetpointPersistence, PersistedSetpoints
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,8 @@ class ControlLogic:
     """Main control logic for the snowmelt and DHW systems"""
 
     def __init__(self, sensor_manager: SensorManager, relay_manager: RelayManager,
-                 setpoint_config: Dict, eco_config: Dict):
+                 setpoint_config: Dict, eco_config: Dict,
+                 persistence: SetpointPersistence = None):
         self.sensors = sensor_manager
         self.relays = relay_manager
         self.state = ControlState()
@@ -81,8 +83,10 @@ class ControlLogic:
         # Cached copy of state for fast GUI reads (no lock needed for reads)
         self._cached_state: Optional[ControlState] = None
         self._on_state_change: Optional[Callable] = None
+        # Setpoint persistence
+        self._persistence = persistence
 
-        # Load initial setpoints from config
+        # Load initial setpoints from config (and persistence if available)
         self._load_setpoints(setpoint_config, eco_config)
         self._update_cached_state()
 
@@ -93,30 +97,66 @@ class ControlLogic:
         self._cached_state = deepcopy(self.state)
     
     def _load_setpoints(self, setpoint_config: Dict, eco_config: Dict):
-        """Load setpoints from configuration"""
-        glycol = setpoint_config.get('glycol', {})
-        dhw = setpoint_config.get('dhw', {})
-        eco = setpoint_config.get('eco', {})
-        
-        self.state.glycol_setpoints = Setpoints(
-            high_temp=glycol.get('high_temp', 110.0),
-            delta_t=glycol.get('delta_t', 15.0)
-        )
-        
-        self.state.dhw_setpoints = Setpoints(
-            high_temp=dhw.get('high_temp', 125.0),
-            delta_t=dhw.get('delta_t', 10.0)
-        )
-        
-        self.state.eco_setpoints = Setpoints(
-            high_temp=eco.get('high_temp', 115.0),
-            delta_t=eco.get('delta_t', 15.0)
-        )
-        
-        self.state.eco_enabled = eco_config.get('enabled', True)
-        self.state.eco_start = eco_config.get('start_time', '22:00')
-        self.state.eco_end = eco_config.get('end_time', '06:00')
-    
+        """Load setpoints from persistence (if available) or config defaults"""
+        if self._persistence:
+            # Merge config into format expected by persistence loader
+            merged_defaults = {
+                'glycol': setpoint_config.get('glycol', {}),
+                'dhw': setpoint_config.get('dhw', {}),
+                'eco': setpoint_config.get('eco', {}),
+                'eco_schedule': eco_config
+            }
+            persisted = self._persistence.load(merged_defaults)
+
+            self.state.glycol_setpoints = Setpoints(
+                persisted.glycol_high_temp, persisted.glycol_delta_t
+            )
+            self.state.dhw_setpoints = Setpoints(
+                persisted.dhw_high_temp, persisted.dhw_delta_t
+            )
+            self.state.eco_setpoints = Setpoints(
+                persisted.eco_high_temp, persisted.eco_delta_t
+            )
+            self.state.eco_start = persisted.eco_start
+            self.state.eco_end = persisted.eco_end
+            self.state.eco_enabled = eco_config.get('enabled', True)
+        else:
+            # Fallback: load directly from config
+            glycol = setpoint_config.get('glycol', {})
+            dhw = setpoint_config.get('dhw', {})
+            eco = setpoint_config.get('eco', {})
+
+            self.state.glycol_setpoints = Setpoints(
+                high_temp=glycol.get('high_temp', 110.0),
+                delta_t=glycol.get('delta_t', 15.0)
+            )
+            self.state.dhw_setpoints = Setpoints(
+                high_temp=dhw.get('high_temp', 125.0),
+                delta_t=dhw.get('delta_t', 10.0)
+            )
+            self.state.eco_setpoints = Setpoints(
+                high_temp=eco.get('high_temp', 115.0),
+                delta_t=eco.get('delta_t', 15.0)
+            )
+            self.state.eco_enabled = eco_config.get('enabled', True)
+            self.state.eco_start = eco_config.get('start_time', '22:00')
+            self.state.eco_end = eco_config.get('end_time', '06:00')
+
+    def _save_setpoints(self):
+        """Save current setpoints to persistence (debounced)"""
+        if self._persistence:
+            setpoints = PersistedSetpoints(
+                glycol_high_temp=self.state.glycol_setpoints.high_temp,
+                glycol_delta_t=self.state.glycol_setpoints.delta_t,
+                dhw_high_temp=self.state.dhw_setpoints.high_temp,
+                dhw_delta_t=self.state.dhw_setpoints.delta_t,
+                eco_high_temp=self.state.eco_setpoints.high_temp,
+                eco_delta_t=self.state.eco_setpoints.delta_t,
+                eco_start=self.state.eco_start,
+                eco_end=self.state.eco_end
+            )
+            self._persistence.save(setpoints)
+
     def set_on_state_change(self, callback: Callable):
         """Set callback for state changes"""
         self._on_state_change = callback
@@ -307,6 +347,7 @@ class ControlLogic:
         with self._state_lock:
             self.state.glycol_setpoints = Setpoints(high_temp, delta_t)
             logger.info(f"Glycol setpoints: high={high_temp}°F, delta={delta_t}°F")
+            self._save_setpoints()
             self._notify_state_change()
 
     def set_dhw_setpoints(self, high_temp: float, delta_t: float):
@@ -314,6 +355,7 @@ class ControlLogic:
         with self._state_lock:
             self.state.dhw_setpoints = Setpoints(high_temp, delta_t)
             logger.info(f"DHW setpoints: high={high_temp}°F, delta={delta_t}°F")
+            self._save_setpoints()
             self._notify_state_change()
 
     def set_eco_setpoints(self, high_temp: float, delta_t: float):
@@ -321,6 +363,7 @@ class ControlLogic:
         with self._state_lock:
             self.state.eco_setpoints = Setpoints(high_temp, delta_t)
             logger.info(f"Eco setpoints: high={high_temp}°F, delta={delta_t}°F")
+            self._save_setpoints()
             self._notify_state_change()
 
     def set_eco_schedule(self, start_time: str, end_time: str):
@@ -329,6 +372,7 @@ class ControlLogic:
             self.state.eco_start = start_time
             self.state.eco_end = end_time
             logger.info(f"Eco schedule: {start_time} - {end_time}")
+            self._save_setpoints()
             self._notify_state_change()
 
     def set_eco_enabled(self, enabled: bool):
@@ -353,3 +397,9 @@ class ControlLogic:
         # Fallback if cache not yet populated
         with self._state_lock:
             return deepcopy(self.state)
+
+    def shutdown(self):
+        """Shutdown control logic, saving any pending setpoints"""
+        if self._persistence:
+            self._persistence.shutdown()
+        logger.info("Control logic shutdown complete")
