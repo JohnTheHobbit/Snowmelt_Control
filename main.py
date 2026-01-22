@@ -23,6 +23,7 @@ from sensors import SensorManager, MockSensorManager
 from relays import RelayManager, EquipmentMode
 from control import ControlLogic
 from mqtt_integration import MQTTIntegration
+from setpoint_persistence import SetpointPersistence
 
 # Global references for cleanup
 app = None
@@ -30,6 +31,7 @@ mqtt_client = None
 relay_manager = None
 sensor_manager = None
 control_thread = None
+control = None
 shutdown_event = threading.Event()
 
 logger = logging.getLogger(__name__)
@@ -111,7 +113,7 @@ def run_headless(control: ControlLogic, mqtt: MQTTIntegration, interval: float):
 
 
 def main():
-    global app, mqtt_client, relay_manager, sensor_manager, control_thread
+    global app, mqtt_client, relay_manager, sensor_manager, control_thread, control
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Snowmelt Control System')
@@ -179,13 +181,17 @@ def main():
 
         # Initialize relay manager
         relay_manager = RelayManager(config['relays'])
-        
+
+        # Initialize setpoint persistence
+        persistence = SetpointPersistence()
+
         # Initialize control logic
         control = ControlLogic(
             sensor_manager=sensor_manager,
             relay_manager=relay_manager,
             setpoint_config=config['setpoints'],
-            eco_config=config['eco_schedule']
+            eco_config=config['eco_schedule'],
+            persistence=persistence
         )
         
         # Initialize MQTT integration
@@ -240,6 +246,9 @@ def main():
         # Cleanup
         logger.info("Shutting down...")
         shutdown_event.set()
+
+        if control:
+            control.shutdown()
 
         if mqtt_client:
             mqtt_client.disconnect()
