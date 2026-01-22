@@ -4,7 +4,7 @@ Implements the control algorithms for snowmelt and DHW systems
 """
 
 import logging
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 from typing import Dict, Optional, Callable
 from dataclasses import dataclass, field
 from threading import Lock, RLock
@@ -57,7 +57,12 @@ class ControlState:
     eco_setpoints: Setpoints = field(default_factory=lambda: Setpoints(115.0, 15.0))
     eco_start: str = "22:00"
     eco_end: str = "06:00"
-    
+
+    # Shutdown delay timer
+    shutdown_timer_enabled: bool = False
+    shutdown_timer_end_time: Optional[datetime] = None
+    shutdown_timer_duration_minutes: int = 0
+
     # Temperatures
     glycol_return_temp: Optional[float] = None
     glycol_supply_temp: Optional[float] = None
@@ -186,7 +191,21 @@ class ControlLogic:
         except Exception as e:
             logger.error(f"Error checking eco time: {e}")
             return False
-    
+
+    def _check_shutdown_timer(self):
+        """Check if shutdown timer has expired and disable snowmelt if so"""
+        if not self.state.shutdown_timer_enabled:
+            return
+        if self.state.shutdown_timer_end_time is None:
+            return
+
+        if datetime.now() >= self.state.shutdown_timer_end_time:
+            logger.info("Shutdown timer expired - disabling snowmelt system")
+            self.state.snowmelt_enabled = False
+            self.state.shutdown_timer_enabled = False
+            self.state.shutdown_timer_end_time = None
+            self.state.shutdown_timer_duration_minutes = 0
+
     def update(self):
         """Main control loop update - call periodically"""
         # Read sensors outside lock (non-blocking now)
@@ -198,6 +217,9 @@ class ControlLogic:
 
             # Check eco mode
             self.state.eco_active = self._is_eco_time()
+
+            # Check shutdown timer
+            self._check_shutdown_timer()
 
             # Run control logic
             self._control_snowmelt()
@@ -381,6 +403,34 @@ class ControlLogic:
             self.state.eco_enabled = enabled
             logger.info(f"Eco mode {'enabled' if enabled else 'disabled'}")
             self._notify_state_change()
+
+    def start_shutdown_timer(self, hours: int, minutes: int):
+        """Start the shutdown delay timer"""
+        with self._state_lock:
+            total_minutes = hours * 60 + minutes
+            if total_minutes <= 0:
+                return
+            self.state.shutdown_timer_duration_minutes = total_minutes
+            self.state.shutdown_timer_end_time = datetime.now() + timedelta(minutes=total_minutes)
+            self.state.shutdown_timer_enabled = True
+            logger.info(f"Shutdown timer started: {hours}h {minutes}m")
+            self._notify_state_change()
+
+    def cancel_shutdown_timer(self):
+        """Cancel the shutdown delay timer"""
+        with self._state_lock:
+            self.state.shutdown_timer_enabled = False
+            self.state.shutdown_timer_end_time = None
+            self.state.shutdown_timer_duration_minutes = 0
+            logger.info("Shutdown timer cancelled")
+            self._notify_state_change()
+
+    def get_shutdown_timer_remaining(self) -> Optional[int]:
+        """Get remaining time in seconds, or None if timer not active"""
+        if not self.state.shutdown_timer_enabled or not self.state.shutdown_timer_end_time:
+            return None
+        remaining = (self.state.shutdown_timer_end_time - datetime.now()).total_seconds()
+        return max(0, int(remaining))
 
     def set_equipment_mode(self, equipment_id: str, mode: EquipmentMode):
         """Set equipment operating mode"""

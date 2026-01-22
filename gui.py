@@ -528,6 +528,117 @@ class TouchTimeEdit(QFrame):
         super().blockSignals(block)
 
 
+class TouchDurationInput(QFrame):
+    """Touch-friendly duration input (hours + minutes) with +/- buttons"""
+
+    durationChanged = pyqtSignal(int, int)  # hours, minutes
+
+    def __init__(self, max_hours: int = 24):
+        super().__init__()
+        self._hours = 0
+        self._minutes = 0
+        self.max_hours = max_hours
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        # Button stylesheet
+        btn_style = """
+            QPushButton {
+                background-color: #0f3460;
+                color: #eaeaea;
+                border: 2px solid #3d3d5c;
+                border-radius: 6px;
+                font-size: 18px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1a5276; border-color: #e94560; }
+            QPushButton:pressed { background-color: #e94560; }
+        """
+
+        # Hours section
+        self.btn_hours_minus = QPushButton("-")
+        self.btn_hours_minus.setFixedSize(36, 40)
+        self.btn_hours_minus.setStyleSheet(btn_style)
+        self.btn_hours_minus.clicked.connect(self._dec_hours)
+
+        self.hours_label = QLabel("0h")
+        self.hours_label.setAlignment(Qt.AlignCenter)
+        self.hours_label.setFixedWidth(40)
+        self.hours_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #eaeaea;")
+
+        self.btn_hours_plus = QPushButton("+")
+        self.btn_hours_plus.setFixedSize(36, 40)
+        self.btn_hours_plus.setStyleSheet(btn_style)
+        self.btn_hours_plus.clicked.connect(self._inc_hours)
+
+        # Minutes section
+        self.btn_mins_minus = QPushButton("-")
+        self.btn_mins_minus.setFixedSize(36, 40)
+        self.btn_mins_minus.setStyleSheet(btn_style)
+        self.btn_mins_minus.clicked.connect(self._dec_minutes)
+
+        self.mins_label = QLabel("0m")
+        self.mins_label.setAlignment(Qt.AlignCenter)
+        self.mins_label.setFixedWidth(45)
+        self.mins_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #eaeaea;")
+
+        self.btn_mins_plus = QPushButton("+")
+        self.btn_mins_plus.setFixedSize(36, 40)
+        self.btn_mins_plus.setStyleSheet(btn_style)
+        self.btn_mins_plus.clicked.connect(self._inc_minutes)
+
+        layout.addWidget(self.btn_hours_minus)
+        layout.addWidget(self.hours_label)
+        layout.addWidget(self.btn_hours_plus)
+        layout.addSpacing(8)
+        layout.addWidget(self.btn_mins_minus)
+        layout.addWidget(self.mins_label)
+        layout.addWidget(self.btn_mins_plus)
+
+        self.setStyleSheet("background-color: transparent;")
+
+    def _inc_hours(self):
+        if self._hours < self.max_hours:
+            self._hours += 1
+            self._update_display()
+            self.durationChanged.emit(self._hours, self._minutes)
+
+    def _dec_hours(self):
+        if self._hours > 0:
+            self._hours -= 1
+            self._update_display()
+            self.durationChanged.emit(self._hours, self._minutes)
+
+    def _inc_minutes(self):
+        self._minutes = (self._minutes + 15) % 60
+        self._update_display()
+        self.durationChanged.emit(self._hours, self._minutes)
+
+    def _dec_minutes(self):
+        self._minutes = (self._minutes - 15) % 60
+        self._update_display()
+        self.durationChanged.emit(self._hours, self._minutes)
+
+    def _update_display(self):
+        self.hours_label.setText(f"{self._hours}h")
+        self.mins_label.setText(f"{self._minutes}m")
+
+    def get_duration(self) -> tuple:
+        return (self._hours, self._minutes)
+
+    def set_duration(self, hours: int, minutes: int):
+        self._hours = max(0, min(hours, self.max_hours))
+        self._minutes = max(0, min(minutes, 59))
+        self._update_display()
+
+    def reset(self):
+        self._hours = 0
+        self._minutes = 0
+        self._update_display()
+
+
 class EquipmentControl(QFrame):
     """Custom widget for controlling equipment with mode selection"""
     
@@ -598,9 +709,11 @@ class EquipmentControl(QFrame):
 
 class DashboardTab(QWidget):
     """Main dashboard showing system overview with enable buttons"""
-    
+
     system_toggled = pyqtSignal(str, bool)
-    
+    timer_started = pyqtSignal(int, int)  # hours, minutes
+    timer_cancelled = pyqtSignal()
+
     def __init__(self, control: ControlLogic):
         super().__init__()
         self.control = control
@@ -615,19 +728,81 @@ class DashboardTab(QWidget):
         top_layout = QHBoxLayout()
         top_layout.setSpacing(12)
         
-        # System enable buttons
+        # System enable buttons and timer
         enable_group = QGroupBox("System Control")
-        enable_layout = QHBoxLayout(enable_group)
-        enable_layout.setSpacing(10)
-        
+        enable_group_layout = QVBoxLayout(enable_group)
+        enable_group_layout.setSpacing(8)
+
+        # Top row: Enable buttons
+        enable_row = QHBoxLayout()
+        enable_row.setSpacing(10)
+
         self.btn_snowmelt = SystemEnableButton("snowmelt", "Snowmelt")
         self.btn_dhw = SystemEnableButton("dhw", "DHW")
         self.btn_eco = SystemEnableButton("eco", "Eco Mode")
-        
+
         for btn in [self.btn_snowmelt, self.btn_dhw, self.btn_eco]:
             btn.setFixedHeight(45)
             btn.toggled_state.connect(self._on_system_toggled)
-            enable_layout.addWidget(btn)
+            enable_row.addWidget(btn)
+
+        enable_group_layout.addLayout(enable_row)
+
+        # Bottom row: Shutdown timer controls
+        timer_row = QHBoxLayout()
+        timer_row.setSpacing(8)
+
+        timer_label = QLabel("Shutdown Timer:")
+        timer_label.setStyleSheet("font-size: 12px; color: #adb5bd;")
+        timer_row.addWidget(timer_label)
+
+        self.timer_duration = TouchDurationInput(max_hours=24)
+        timer_row.addWidget(self.timer_duration)
+
+        self.btn_timer_start = QPushButton("Start")
+        self.btn_timer_start.setFixedSize(60, 40)
+        self.btn_timer_start.setStyleSheet("""
+            QPushButton {
+                background-color: #0f3460;
+                color: #eaeaea;
+                border: 2px solid #3d3d5c;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1a5276; border-color: #51cf66; }
+            QPushButton:pressed { background-color: #51cf66; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #666; }
+        """)
+        self.btn_timer_start.clicked.connect(self._on_timer_start)
+        timer_row.addWidget(self.btn_timer_start)
+
+        self.btn_timer_cancel = QPushButton("Cancel")
+        self.btn_timer_cancel.setFixedSize(60, 40)
+        self.btn_timer_cancel.setEnabled(False)
+        self.btn_timer_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #0f3460;
+                color: #eaeaea;
+                border: 2px solid #3d3d5c;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #1a5276; border-color: #ff6b6b; }
+            QPushButton:pressed { background-color: #ff6b6b; }
+            QPushButton:disabled { background-color: #2d2d2d; color: #666; }
+        """)
+        self.btn_timer_cancel.clicked.connect(self._on_timer_cancel)
+        timer_row.addWidget(self.btn_timer_cancel)
+
+        self.timer_countdown = QLabel("Not Active")
+        self.timer_countdown.setFixedWidth(100)
+        self.timer_countdown.setAlignment(Qt.AlignCenter)
+        self.timer_countdown.setStyleSheet("font-size: 14px; font-weight: bold; color: #adb5bd;")
+        timer_row.addWidget(self.timer_countdown)
+
+        enable_group_layout.addLayout(timer_row)
         
         # Status indicators
         status_group = QGroupBox("Status")
@@ -709,7 +884,16 @@ class DashboardTab(QWidget):
     
     def _on_system_toggled(self, system: str, enabled: bool):
         self.system_toggled.emit(system, enabled)
-    
+
+    def _on_timer_start(self):
+        hours, minutes = self.timer_duration.get_duration()
+        if hours == 0 and minutes == 0:
+            return  # Don't start with zero duration
+        self.timer_started.emit(hours, minutes)
+
+    def _on_timer_cancel(self):
+        self.timer_cancelled.emit()
+
     def update_display(self, state: ControlState):
         colors = {
             SystemState.IDLE: "#adb5bd",
@@ -752,7 +936,27 @@ class DashboardTab(QWidget):
             StyleSheet.temp_display(state.dhw_tank_temp, dhw_sp.high_temp, dhw_sp.low_temp)
         )
         self.temp_hx_delta.set_value(state.hx_delta_t)
-        
+
+        # Update shutdown timer display
+        if state.shutdown_timer_enabled and state.shutdown_timer_end_time:
+            remaining = self.control.get_shutdown_timer_remaining()
+            if remaining is not None and remaining > 0:
+                hours = remaining // 3600
+                minutes = (remaining % 3600) // 60
+                seconds = remaining % 60
+                self.timer_countdown.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+                self.timer_countdown.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffa94d;")
+                self.btn_timer_start.setEnabled(False)
+                self.btn_timer_cancel.setEnabled(True)
+            else:
+                self.timer_countdown.setText("Expired")
+                self.timer_countdown.setStyleSheet("font-size: 14px; font-weight: bold; color: #51cf66;")
+        else:
+            self.timer_countdown.setText("Not Active")
+            self.timer_countdown.setStyleSheet("font-size: 14px; font-weight: bold; color: #adb5bd;")
+            self.btn_timer_start.setEnabled(True)
+            self.btn_timer_cancel.setEnabled(False)
+
         # Update time
         now = datetime.now()
         self.time_label.setText(now.strftime("%H:%M:%S   %Y-%m-%d"))
@@ -1180,7 +1384,21 @@ class MainWindow(QMainWindow):
         self.setpoints_tab.eco_schedule_changed.connect(self._on_eco_schedule_changed)
         self.setpoints_tab.shutdown_requested.connect(self._on_shutdown_requested)
         self.dashboard_tab.system_toggled.connect(self._on_system_toggled)
-    
+        self.dashboard_tab.timer_started.connect(self._on_timer_started)
+        self.dashboard_tab.timer_cancelled.connect(self._on_timer_cancelled)
+
+    def _on_timer_started(self, hours: int, minutes: int):
+        try:
+            self.control.start_shutdown_timer(hours, minutes)
+        except Exception as e:
+            logger.error(f"Error starting timer: {e}")
+
+    def _on_timer_cancelled(self):
+        try:
+            self.control.cancel_shutdown_timer()
+        except Exception as e:
+            logger.error(f"Error cancelling timer: {e}")
+
     def _on_equipment_mode_changed(self, equipment_id: str, mode: str):
         try:
             mode_enum = EquipmentMode(mode)
