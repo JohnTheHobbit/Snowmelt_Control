@@ -529,15 +529,14 @@ class TouchTimeEdit(QFrame):
 
 
 class TouchDurationInput(QFrame):
-    """Touch-friendly duration input (hours + minutes) with +/- buttons"""
+    """Touch-friendly duration input with single +/- buttons (15-min increments)"""
 
     durationChanged = pyqtSignal(int, int)  # hours, minutes
 
     def __init__(self, max_hours: int = 24):
         super().__init__()
-        self._hours = 0
-        self._minutes = 0
-        self.max_hours = max_hours
+        self._total_minutes = 0
+        self.max_minutes = max_hours * 60
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -550,92 +549,65 @@ class TouchDurationInput(QFrame):
                 color: #eaeaea;
                 border: 2px solid #3d3d5c;
                 border-radius: 6px;
-                font-size: 18px;
+                font-size: 20px;
                 font-weight: bold;
             }
             QPushButton:hover { background-color: #1a5276; border-color: #e94560; }
             QPushButton:pressed { background-color: #e94560; }
         """
 
-        # Hours section
-        self.btn_hours_minus = QPushButton("-")
-        self.btn_hours_minus.setFixedSize(36, 40)
-        self.btn_hours_minus.setStyleSheet(btn_style)
-        self.btn_hours_minus.clicked.connect(self._dec_hours)
+        # Decrement button
+        self.btn_minus = QPushButton("-")
+        self.btn_minus.setFixedSize(44, 44)
+        self.btn_minus.setStyleSheet(btn_style)
+        self.btn_minus.clicked.connect(self._decrement)
 
-        self.hours_label = QLabel("0h")
-        self.hours_label.setAlignment(Qt.AlignCenter)
-        self.hours_label.setFixedWidth(40)
-        self.hours_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #eaeaea;")
+        # Duration display (e.g., "1h 30m")
+        self.duration_label = QLabel("0h 0m")
+        self.duration_label.setAlignment(Qt.AlignCenter)
+        self.duration_label.setFixedWidth(80)
+        self.duration_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #eaeaea;")
 
-        self.btn_hours_plus = QPushButton("+")
-        self.btn_hours_plus.setFixedSize(36, 40)
-        self.btn_hours_plus.setStyleSheet(btn_style)
-        self.btn_hours_plus.clicked.connect(self._inc_hours)
+        # Increment button
+        self.btn_plus = QPushButton("+")
+        self.btn_plus.setFixedSize(44, 44)
+        self.btn_plus.setStyleSheet(btn_style)
+        self.btn_plus.clicked.connect(self._increment)
 
-        # Minutes section
-        self.btn_mins_minus = QPushButton("-")
-        self.btn_mins_minus.setFixedSize(36, 40)
-        self.btn_mins_minus.setStyleSheet(btn_style)
-        self.btn_mins_minus.clicked.connect(self._dec_minutes)
-
-        self.mins_label = QLabel("0m")
-        self.mins_label.setAlignment(Qt.AlignCenter)
-        self.mins_label.setFixedWidth(45)
-        self.mins_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #eaeaea;")
-
-        self.btn_mins_plus = QPushButton("+")
-        self.btn_mins_plus.setFixedSize(36, 40)
-        self.btn_mins_plus.setStyleSheet(btn_style)
-        self.btn_mins_plus.clicked.connect(self._inc_minutes)
-
-        layout.addWidget(self.btn_hours_minus)
-        layout.addWidget(self.hours_label)
-        layout.addWidget(self.btn_hours_plus)
-        layout.addSpacing(8)
-        layout.addWidget(self.btn_mins_minus)
-        layout.addWidget(self.mins_label)
-        layout.addWidget(self.btn_mins_plus)
+        layout.addWidget(self.btn_minus)
+        layout.addWidget(self.duration_label)
+        layout.addWidget(self.btn_plus)
 
         self.setStyleSheet("background-color: transparent;")
 
-    def _inc_hours(self):
-        if self._hours < self.max_hours:
-            self._hours += 1
+    def _increment(self):
+        if self._total_minutes < self.max_minutes:
+            self._total_minutes += 15
             self._update_display()
-            self.durationChanged.emit(self._hours, self._minutes)
+            hours, minutes = divmod(self._total_minutes, 60)
+            self.durationChanged.emit(hours, minutes)
 
-    def _dec_hours(self):
-        if self._hours > 0:
-            self._hours -= 1
+    def _decrement(self):
+        if self._total_minutes > 0:
+            self._total_minutes -= 15
             self._update_display()
-            self.durationChanged.emit(self._hours, self._minutes)
-
-    def _inc_minutes(self):
-        self._minutes = (self._minutes + 15) % 60
-        self._update_display()
-        self.durationChanged.emit(self._hours, self._minutes)
-
-    def _dec_minutes(self):
-        self._minutes = (self._minutes - 15) % 60
-        self._update_display()
-        self.durationChanged.emit(self._hours, self._minutes)
+            hours, minutes = divmod(self._total_minutes, 60)
+            self.durationChanged.emit(hours, minutes)
 
     def _update_display(self):
-        self.hours_label.setText(f"{self._hours}h")
-        self.mins_label.setText(f"{self._minutes}m")
+        hours, minutes = divmod(self._total_minutes, 60)
+        self.duration_label.setText(f"{hours}h {minutes}m")
 
     def get_duration(self) -> tuple:
-        return (self._hours, self._minutes)
+        hours, minutes = divmod(self._total_minutes, 60)
+        return (hours, minutes)
 
     def set_duration(self, hours: int, minutes: int):
-        self._hours = max(0, min(hours, self.max_hours))
-        self._minutes = max(0, min(minutes, 59))
+        self._total_minutes = max(0, min(hours * 60 + minutes, self.max_minutes))
         self._update_display()
 
     def reset(self):
-        self._hours = 0
-        self._minutes = 0
+        self._total_minutes = 0
         self._update_display()
 
 
@@ -760,14 +732,14 @@ class DashboardTab(QWidget):
         timer_row.addWidget(self.timer_duration)
 
         self.btn_timer_start = QPushButton("Start")
-        self.btn_timer_start.setFixedSize(60, 40)
+        self.btn_timer_start.setFixedSize(80, 40)
         self.btn_timer_start.setStyleSheet("""
             QPushButton {
                 background-color: #0f3460;
                 color: #eaeaea;
                 border: 2px solid #3d3d5c;
                 border-radius: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:hover { background-color: #1a5276; border-color: #51cf66; }
@@ -778,7 +750,7 @@ class DashboardTab(QWidget):
         timer_row.addWidget(self.btn_timer_start)
 
         self.btn_timer_cancel = QPushButton("Cancel")
-        self.btn_timer_cancel.setFixedSize(60, 40)
+        self.btn_timer_cancel.setFixedSize(80, 40)
         self.btn_timer_cancel.setEnabled(False)
         self.btn_timer_cancel.setStyleSheet("""
             QPushButton {
@@ -786,7 +758,7 @@ class DashboardTab(QWidget):
                 color: #eaeaea;
                 border: 2px solid #3d3d5c;
                 border-radius: 6px;
-                font-size: 12px;
+                font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:hover { background-color: #1a5276; border-color: #ff6b6b; }
