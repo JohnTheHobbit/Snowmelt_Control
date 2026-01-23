@@ -10,8 +10,9 @@
 7. [Hardware Setup](#hardware-setup)
 8. [Configuration Files](#configuration-files)
 9. [Home Assistant Integration](#home-assistant-integration)
-10. [Starting the System](#starting-the-system)
-11. [Troubleshooting](#troubleshooting)
+10. [GUI Features](#gui-features)
+11. [Starting the System](#starting-the-system)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -26,6 +27,8 @@ This control system manages:
 - Equipment operates in three modes: **Auto**, **On**, **Off**
 - Auto mode follows system logic; On/Off provides manual override
 - Temperature-based control with high setpoint and delta T (differential)
+- **Shutdown Delay Timer**: Schedule automatic snowmelt shutdown (15-min increments, up to 24 hours)
+- **Setpoint Persistence**: User-modified setpoints are saved to disk and survive reboots (debounced to minimize SD card writes)
 
 ---
 
@@ -37,7 +40,7 @@ This control system manages:
 - Power supply (official RPi 5V 3A recommended)
 
 ### Display
-- Waveshare 7" touchscreen (800x480)
+- Waveshare 7" touchscreen (1024x600)
 
 ### Relay Control
 - Oono 8-channel SPST relay HAT
@@ -58,13 +61,15 @@ This control system manages:
 ```
 /home/pi/snowmelt_control/
 ├── main.py                 # Main application entry point
-├── sensors.py              # Temperature sensor management
+├── sensors.py              # Temperature sensor management (async background reads)
 ├── relays.py               # Relay control module
 ├── control.py              # Control logic engine
 ├── mqtt_integration.py     # Home Assistant MQTT integration
 ├── gui.py                  # PyQt5 touchscreen interface
+├── setpoint_persistence.py # Saves/loads setpoints to survive reboots
 ├── config.yaml             # Main configuration file
 ├── secrets.yaml            # MQTT credentials (not in git)
+├── setpoints_state.yaml    # Persisted setpoints (auto-generated, not in git)
 ├── requirements.txt        # Python dependencies
 ├── install.sh              # Automated installation script
 ├── discover_sensors.py     # Sensor discovery utility
@@ -198,10 +203,10 @@ sudo nano /boot/firmware/config.txt
 
 Add:
 ```ini
-# Waveshare 7" display settings
+# Waveshare 7" display settings (1024x600)
 hdmi_group=2
 hdmi_mode=87
-hdmi_cvt=800 480 60 6 0 0 0
+hdmi_cvt=1024 600 60 6 0 0 0
 hdmi_drive=1
 ```
 
@@ -517,6 +522,37 @@ The system automatically creates these Home Assistant entities via MQTT discover
 - `number.snowmelt_dhw_delta_t`
 - `number.snowmelt_eco_high_setpoint`
 - `number.snowmelt_eco_delta_t`
+
+---
+
+## GUI Features
+
+The touchscreen GUI (1024x600) provides three tabs:
+
+### Dashboard Tab
+- **System Enable Buttons**: Toggle Snowmelt, DHW, and Eco Mode on/off
+- **Shutdown Delay Timer**: Set a countdown timer (15-min increments) to automatically disable the snowmelt system
+- **Status Indicators**: Shows current state of each system (Idle, Heating, Bypass, Error)
+- **Temperature Displays**: Grouped logically by Glycol Loop, Heat Exchanger (with ΔT), and DHW Tank
+- **Connectivity Status**: MQTT and Network connection indicators in the bottom status bar
+- **Clock Display**: Current time and date
+
+### Equipment Tab
+- Individual control for each piece of equipment (pumps, valves)
+- Three modes per device: **Auto** (follows control logic), **On** (manual override), **Off** (manual override)
+- Real-time status indicators showing equipment state
+
+### Settings Tab
+- **Setpoint Configuration**: Adjust high temperature and delta T for Glycol, DHW, and Eco Mode
+- **Eco Mode Schedule**: Set start and end times for eco mode (30-minute increments)
+- **System Information**: Displays MQTT broker address and local IP address
+- **Shutdown RPi Button**: Safely shutdown the Raspberry Pi (with confirmation dialog)
+
+### Key Features
+- **Non-blocking sensor reads**: Background thread reads sensors asynchronously, preventing GUI freezes
+- **Setpoint Persistence**: Modified setpoints are automatically saved to `setpoints_state.yaml` and restored on restart
+- **Touch-optimized controls**: Large +/- buttons for setpoint adjustment
+- Press **ESC** key to exit the application
 
 ---
 
