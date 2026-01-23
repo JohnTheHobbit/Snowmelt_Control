@@ -30,6 +30,11 @@ This control system manages:
 - **Shutdown Delay Timer**: Schedule automatic snowmelt shutdown (15-min increments, up to 24 hours)
 - **Setpoint Persistence**: User-modified setpoints are saved to disk and survive reboots (debounced to minimize SD card writes)
 
+### Graphical User Interface
+
+!["Dashboard Screen"](/images/Dashboard.png)
+!["Equipment Screen"](images/Equipment.png)
+!["Settings Screen"](images/Settings.png)
 ---
 
 ## Hardware Requirements
