@@ -1075,7 +1075,7 @@ class SetpointsTab(QWidget):
         high_label = QLabel("High:")
         high_label.setFixedWidth(50)
         high_label.setStyleSheet("font-size: 14px;")
-        self.dhw_high = TouchSpinBox(100, 130, " °F", 5.0)
+        self.dhw_high = TouchSpinBox(100, 160, " °F", 5.0)
         self.dhw_high.valueChanged.connect(self._on_dhw_changed)
         high_row.addWidget(high_label)
         high_row.addWidget(self.dhw_high)
