@@ -1001,7 +1001,8 @@ class SetpointsTab(QWidget):
     system_toggled = pyqtSignal(str, bool)
     eco_schedule_changed = pyqtSignal(str, str)
     shutdown_requested = pyqtSignal()
-    
+    restart_requested = pyqtSignal()
+
     def __init__(self, control: ControlLogic):
         super().__init__()
         self.control = control
@@ -1106,6 +1107,30 @@ class SetpointsTab(QWidget):
         system_layout = QHBoxLayout(system_group)
         system_layout.setContentsMargins(8, 8, 8, 8)
         system_layout.setSpacing(10)
+
+        # Restart button - amber/orange styling
+        self.btn_restart = QPushButton("Restart RPi")
+        self.btn_restart.setStyleSheet("""
+            QPushButton {
+                background-color: #e67e22;
+                color: #ffffff;
+                border: 2px solid #d35400;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                min-height: 45px;
+                padding: 8px 20px;
+            }
+            QPushButton:hover {
+                background-color: #f39c12;
+                border-color: #e67e22;
+            }
+            QPushButton:pressed {
+                background-color: #ca6f1e;
+            }
+        """)
+        self.btn_restart.clicked.connect(self._on_restart_clicked)
+        system_layout.addWidget(self.btn_restart)
 
         # Shutdown button - prominent red styling
         self.btn_shutdown = QPushButton("Shutdown RPi")
@@ -1235,6 +1260,10 @@ class SetpointsTab(QWidget):
         layout.setColumnStretch(0, 2)  # Left column gets more space
         layout.setColumnStretch(1, 1)  # Eco column
 
+    def _on_restart_clicked(self):
+        """Emit restart request signal"""
+        self.restart_requested.emit()
+
     def _on_shutdown_clicked(self):
         """Emit shutdown request signal"""
         self.shutdown_requested.emit()
@@ -1355,6 +1384,7 @@ class MainWindow(QMainWindow):
         self.setpoints_tab.system_toggled.connect(self._on_system_toggled)
         self.setpoints_tab.eco_schedule_changed.connect(self._on_eco_schedule_changed)
         self.setpoints_tab.shutdown_requested.connect(self._on_shutdown_requested)
+        self.setpoints_tab.restart_requested.connect(self._on_restart_requested)
         self.dashboard_tab.system_toggled.connect(self._on_system_toggled)
         self.dashboard_tab.timer_started.connect(self._on_timer_started)
         self.dashboard_tab.timer_cancelled.connect(self._on_timer_cancelled)
@@ -1441,6 +1471,43 @@ class MainWindow(QMainWindow):
                 error_msg = QMessageBox(self)
                 error_msg.setWindowTitle("Shutdown Failed")
                 error_msg.setText(f"Failed to shutdown: {e}")
+                error_msg.setIcon(QMessageBox.Critical)
+                error_msg.exec_()
+
+    def _on_restart_requested(self):
+        """Handle restart request with confirmation dialog"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Confirm Restart")
+        msg.setText("Are you sure you want to restart the Raspberry Pi?")
+        msg.setInformativeText("The system will reboot and should come back online automatically.")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+        msg.setDefaultButton(QMessageBox.Cancel)
+
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1a1a2e;
+            }
+            QMessageBox QLabel {
+                color: #eaeaea;
+                font-size: 14px;
+            }
+            QPushButton {
+                min-width: 80px;
+                min-height: 40px;
+                font-size: 14px;
+            }
+        """)
+
+        if msg.exec_() == QMessageBox.Yes:
+            logger.info("Restart requested by user - initiating system reboot")
+            try:
+                subprocess.run(['sudo', 'shutdown', '-r', 'now'], check=True)
+            except Exception as e:
+                logger.error(f"Failed to initiate restart: {e}")
+                error_msg = QMessageBox(self)
+                error_msg.setWindowTitle("Restart Failed")
+                error_msg.setText(f"Failed to restart: {e}")
                 error_msg.setIcon(QMessageBox.Critical)
                 error_msg.exec_()
 

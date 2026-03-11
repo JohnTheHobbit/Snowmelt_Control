@@ -6,6 +6,8 @@ Handles 1-Wire temperature sensor communication on Raspberry Pi
 import os
 import glob
 import logging
+import subprocess
+import time
 from typing import Dict, Optional
 from dataclasses import dataclass
 from threading import Lock, Thread, Event
@@ -15,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 # 1-Wire base path on Raspberry Pi
 ONEWIRE_BASE_PATH = "/sys/bus/w1/devices"
+
+# Self-healing configuration
+FAILURE_THRESHOLD = 5          # consecutive all-sensor-failure cycles (~10s) before reset
+MAX_RESET_ATTEMPTS = 3         # max bus resets before giving up
+BUS_RESET_RECOVERY_WAIT = 5.0  # seconds to wait after kernel module reload
 
 
 @dataclass
@@ -120,6 +127,10 @@ class SensorManager:
         self._stop_event = Event()
         self._read_thread: Optional[Thread] = None
 
+        # Self-healing state
+        self._consecutive_all_failures = 0
+        self._reset_attempts = 0
+
         # Initialize sensors from config
         for sensor_id, config in sensor_config.items():
             self.sensors[sensor_id] = TemperatureSensor(
@@ -158,11 +169,77 @@ class SensorManager:
                     self._readings = new_readings
                     self._cached_readings = deepcopy(new_readings)
 
+                # Self-healing: detect total sensor failure and attempt bus reset
+                total = len(new_readings)
+                valid_count = sum(1 for r in new_readings.values() if r.valid)
+
+                if total > 0 and valid_count == 0:
+                    self._consecutive_all_failures += 1
+                    logger.warning(
+                        f"All {total} sensors failed "
+                        f"(consecutive failures: {self._consecutive_all_failures})"
+                    )
+
+                    if self._consecutive_all_failures >= FAILURE_THRESHOLD:
+                        if self._reset_attempts < MAX_RESET_ATTEMPTS:
+                            self._reset_attempts += 1
+                            logger.warning(
+                                f"Attempting 1-Wire bus reset "
+                                f"(attempt {self._reset_attempts}/{MAX_RESET_ATTEMPTS})"
+                            )
+                            self._reset_onewire_bus()
+                            self._consecutive_all_failures = 0
+                            # Wait for bus to stabilize, but stay responsive to shutdown
+                            self._stop_event.wait(BUS_RESET_RECOVERY_WAIT)
+                            continue  # Re-read sensors immediately
+                        else:
+                            logger.error(
+                                "Max 1-Wire bus reset attempts reached. "
+                                "Manual intervention required."
+                            )
+                else:
+                    if self._consecutive_all_failures > 0:
+                        logger.info(
+                            f"Sensors recovered after "
+                            f"{self._consecutive_all_failures} consecutive all-sensor failures"
+                        )
+                    if self._reset_attempts > 0:
+                        logger.info("1-Wire bus recovery successful. Resetting attempt counter.")
+                    self._consecutive_all_failures = 0
+                    self._reset_attempts = 0
+
             except Exception as e:
                 logger.error(f"Error in sensor read loop: {e}")
 
             # Wait before next read cycle (sensors update slowly anyway)
             self._stop_event.wait(2.0)
+
+    @staticmethod
+    def _reset_onewire_bus():
+        """Reload 1-Wire kernel modules to recover from bus failure"""
+        try:
+            logger.warning("Unloading 1-Wire kernel modules...")
+            subprocess.run(
+                ['sudo', 'modprobe', '-r', 'w1_therm', 'w1_gpio'],
+                capture_output=True, timeout=10
+            )
+            time.sleep(1.0)
+
+            logger.warning("Reloading w1_gpio module...")
+            subprocess.run(
+                ['sudo', 'modprobe', 'w1_gpio'],
+                capture_output=True, timeout=10
+            )
+
+            logger.warning("Reloading w1_therm module...")
+            subprocess.run(
+                ['sudo', 'modprobe', 'w1_therm'],
+                capture_output=True, timeout=10
+            )
+
+            logger.warning("1-Wire bus reset complete")
+        except Exception as e:
+            logger.error(f"Failed to reset 1-Wire bus: {e}")
 
     def read_all(self) -> Dict[str, SensorReading]:
         """Return cached readings (non-blocking)"""
