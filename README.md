@@ -29,6 +29,7 @@ This control system manages:
 - Temperature-based control with high setpoint and delta T (differential)
 - **Shutdown Delay Timer**: Schedule automatic snowmelt shutdown (15-min increments, up to 24 hours)
 - **Setpoint Persistence**: User-modified setpoints are saved to disk and survive reboots (debounced to minimize SD card writes)
+- **1-Wire Self-Healing**: Automatic detection and recovery from 1-Wire bus failures — if all sensors become unresponsive, the system reloads kernel modules to restore communication without requiring a manual restart
 
 ### Graphical User Interface
 
@@ -551,10 +552,12 @@ The touchscreen GUI (1024x600) provides three tabs:
 - **Setpoint Configuration**: Adjust high temperature and delta T for Glycol, DHW, and Eco Mode
 - **Eco Mode Schedule**: Set start and end times for eco mode (30-minute increments)
 - **System Information**: Displays MQTT broker address and local IP address
-- **Shutdown RPi Button**: Safely shutdown the Raspberry Pi (with confirmation dialog)
+- **Restart RPi Button**: Reboot the Raspberry Pi (amber button, with confirmation dialog)
+- **Shutdown RPi Button**: Safely shutdown the Raspberry Pi (red button, with confirmation dialog)
 
 ### Key Features
 - **Non-blocking sensor reads**: Background thread reads sensors asynchronously, preventing GUI freezes
+- **1-Wire bus self-healing**: Automatically detects total sensor failure and reloads kernel modules (`w1_therm`, `w1_gpio`) to recover — up to 3 attempts before requiring manual intervention
 - **Setpoint Persistence**: Modified setpoints are automatically saved to `setpoints_state.yaml` and restored on restart
 - **Touch-optimized controls**: Large +/- buttons for setpoint adjustment
 - Press **ESC** key to exit the application
@@ -635,6 +638,27 @@ After reboot:
 ---
 
 ## Troubleshooting
+
+### All Sensors Showing as Unavailable
+
+The system includes automatic 1-Wire bus self-healing. If all sensors become unresponsive, the system will:
+1. Detect 5 consecutive all-sensor-failure read cycles (~10 seconds)
+2. Automatically unload and reload the `w1_therm` and `w1_gpio` kernel modules
+3. Retry up to 3 times before logging an error requiring manual intervention
+
+If auto-recovery fails:
+```bash
+# Check service logs for reset attempts
+sudo journalctl -u snowmelt.service | grep "1-Wire"
+
+# Manual kernel module reload
+sudo modprobe -r w1_therm w1_gpio
+sudo modprobe w1_gpio
+sudo modprobe w1_therm
+
+# Or restart the service
+sudo systemctl restart snowmelt.service
+```
 
 ### Sensors Not Found
 
@@ -743,4 +767,4 @@ For issues or questions:
 
 ---
 
-*Last updated: January 2026*
+*Last updated: March 2026*
